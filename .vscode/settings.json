@@ -8,7 +8,29 @@
             "driver": "PostgreSQL",
             "name": "CS-01 Database",
             "database": "intelliport_db",
-            "username": "admin"
+            "username": "admin",
+            "password": "Heyrose05"
         }
-    ]
+    ],
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/backend"
+    ],
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/backend"
+    ],
+    "python.terminal.activateEnvironment": true,
+    "python.venvFolders": [
+        "backend"
+    ],
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "**/node_modules": true,
+        "**/.next": true,
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "backend/venv": true,
+        "**/.vscode": false
+    }
 }

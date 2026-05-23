@@ -10,10 +10,14 @@ export default function PlanPage() {
   
   const [isLoading, setIsLoading] = useState(false);
   
+  type CalcMode = 'normal' | 'find_duration' | 'find_budget';
+  const [calcMode, setCalcMode] = useState<CalcMode>('normal');
+  
   // 🌟 เพิ่ม State สำหรับจำนวนหุ้น (กำหนดค่าเริ่มต้นเป็น 5)
   const [numStocks, setNumStocks] = useState('5');
   
   const [formData, setFormData] = useState({
+    portfolioName: '',
     initialAmount: '',
     targetAmount: '',
     duration: '',
@@ -21,6 +25,7 @@ export default function PlanPage() {
   });
 
   const [errors, setErrors] = useState({
+    portfolioName: '',
     initialAmount: '',
     targetAmount: '',
     duration: '',
@@ -38,20 +43,28 @@ export default function PlanPage() {
 
   const validateForm = () => {
     let isValid = true;
-    const newErrors = { initialAmount: '', targetAmount: '', duration: '', numStocks: '' };
+    const newErrors = { portfolioName: '', initialAmount: '', targetAmount: '', duration: '', numStocks: '' };
 
-    if (!formData.initialAmount) {
-      newErrors.initialAmount = 'กรุณาระบุเงินลงทุนเริ่มต้น'; isValid = false;
-    } else if (Number(getRawNumber(formData.initialAmount)) <= 0) {
-      newErrors.initialAmount = 'เงินลงทุนต้องมากกว่า 0 บาท'; isValid = false;
+    if (!formData.portfolioName.trim()) {
+      newErrors.portfolioName = 'กรุณาระบุชื่อพอร์ตการลงทุน'; isValid = false;
+    }
+
+    if (calcMode !== 'find_budget') {
+      if (!formData.initialAmount) {
+        newErrors.initialAmount = 'กรุณาระบุเงินลงทุนเริ่มต้น'; isValid = false;
+      } else if (Number(getRawNumber(formData.initialAmount)) <= 0) {
+        newErrors.initialAmount = 'เงินลงทุนต้องมากกว่า 0 บาท'; isValid = false;
+      }
     }
 
     if (!formData.targetAmount) {
       newErrors.targetAmount = 'กรุณาระบุเป้าหมายเงินเก็บ'; isValid = false;
     }
 
-    if (!formData.duration) {
-      newErrors.duration = 'กรุณาระบุระยะเวลาลงทุน'; isValid = false;
+    if (calcMode !== 'find_duration') {
+      if (!formData.duration) {
+        newErrors.duration = 'กรุณาระบุระยะเวลาลงทุน'; isValid = false;
+      }
     }
 
     // 🌟 ตรวจสอบจำนวนหุ้น (ต้องไม่น้อยกว่า 3 ตามที่ตั้งค่าใน Backend)
@@ -63,24 +76,51 @@ export default function PlanPage() {
     return isValid;
   };
 
+  const expectedReturn = formData.riskLevel === 'low' ? 0.05 : formData.riskLevel === 'medium' ? 0.08 : 0.12;
+
+  const getCalculatedDuration = () => {
+    if (calcMode === 'find_duration' && formData.initialAmount && formData.targetAmount) {
+      const p = Number(getRawNumber(formData.initialAmount));
+      const t = Number(getRawNumber(formData.targetAmount));
+      if (p > 0 && t > p) {
+        return Math.ceil(Math.log(t / p) / Math.log(1 + expectedReturn));
+      }
+    }
+    return formData.duration;
+  };
+
+  const getCalculatedBudget = () => {
+    if (calcMode === 'find_budget' && formData.duration && formData.targetAmount) {
+      const t = Number(getRawNumber(formData.targetAmount));
+      const d = Number(getRawNumber(formData.duration));
+      if (t > 0 && d > 0) {
+        return Math.ceil(t / Math.pow(1 + expectedReturn, d));
+      }
+    }
+    return formData.initialAmount;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!userId) {
       alert("กรุณาเข้าสู่ระบบก่อนสร้างแผนการลงทุนครับ");
-      router.push('/sign-in'); 
+      router.push('/login'); 
       return; 
     }
 
     if (validateForm()) {
       setIsLoading(true);
 
-      const durationNum = Number(getRawNumber(formData.duration));
+      const finalDuration = Number(getCalculatedDuration() || 0);
+      const finalBudget = Number(getRawNumber(String(getCalculatedBudget() || '0')));
+      const finalTarget = Number(getRawNumber(formData.targetAmount));
+
       const cleanData = {
         ...formData,
-        initialAmount: Number(getRawNumber(formData.initialAmount)),
-        targetAmount: Number(getRawNumber(formData.targetAmount)),
-        duration: durationNum,
+        initialAmount: finalBudget,
+        targetAmount: finalTarget,
+        duration: finalDuration,
         numStocks: Number(numStocks)
       };
 
@@ -91,7 +131,7 @@ export default function PlanPage() {
 
       const endDate = new Date();
       const startDate = new Date();
-      startDate.setFullYear(endDate.getFullYear() - durationNum);
+      startDate.setFullYear(endDate.getFullYear() - finalDuration);
 
       try {
         const response = await fetch('http://localhost:8000/api/optimize', {
@@ -99,14 +139,16 @@ export default function PlanPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_id: userId,
+            portfolio_name: formData.portfolioName,
             target_beta: targetBeta,
             max_stocks: Number(numStocks),
             start_date: startDate.toISOString().split('T')[0],
             end_date: endDate.toISOString().split('T')[0],
             
             // 🌟 เพิ่ม 2 บรรทัดนี้ส่งไปให้ Backend เพื่อ Insert ลง PostgreSQL 🌟
-            budget: Number(getRawNumber(formData.initialAmount)),
-            duration_years: durationNum
+            budget: finalBudget,
+            target_amount: finalTarget,
+            duration_years: finalDuration
           })
         });
 
@@ -119,7 +161,7 @@ export default function PlanPage() {
         if (data.status === 'success') {
           localStorage.setItem('userPlan', JSON.stringify(cleanData));
           localStorage.setItem('portfolioResult', JSON.stringify(data)); 
-          router.push('/dashboard'); 
+          router.push(`/dashboard/${data.portfolio_id}`); 
         } else {
           alert('เกิดข้อผิดพลาดในการคำนวณ: ' + data.message);
         }
@@ -134,6 +176,13 @@ export default function PlanPage() {
   };
 
   const handleChange = (field: string, value: string) => {
+    if (field === 'portfolioName') {
+      setFormData({ ...formData, [field]: value });
+      if (errors[field as keyof typeof errors]) {
+        setErrors({ ...errors, [field]: '' });
+      }
+      return;
+    }
     const formattedValue = formatNumber(value);
     setFormData({ ...formData, [field]: formattedValue });
     if (errors[field as keyof typeof errors]) {
@@ -150,18 +199,57 @@ export default function PlanPage() {
         </div>
 
         <div className="bg-white/80 backdrop-blur-xl py-10 px-8 shadow-2xl shadow-yellow-100/50 rounded-2xl border border-yellow-100">
+          
+          {/* 🌟 Goal Calculator Mode Selector */}
+          <div className="mb-8 flex flex-col sm:flex-row gap-3 p-1.5 bg-slate-100 rounded-xl">
+            <button
+              type="button" onClick={() => {setCalcMode('normal'); setErrors({...errors, initialAmount: '', duration: ''});}}
+              className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all duration-200 ${calcMode === 'normal' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+            >
+              📊 กำหนดเองทั้งหมด
+            </button>
+            <button
+              type="button" onClick={() => {setCalcMode('find_budget'); setErrors({...errors, initialAmount: ''});}}
+              className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all duration-200 ${calcMode === 'find_budget' ? 'bg-yellow-400 text-slate-900 shadow-sm shadow-yellow-400/20' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+            >
+              💰 คำนวณหาเงินลงทุนตั้งต้น
+            </button>
+            <button
+              type="button" onClick={() => {setCalcMode('find_duration'); setErrors({...errors, duration: ''});}}
+              className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all duration-200 ${calcMode === 'find_duration' ? 'bg-yellow-400 text-slate-900 shadow-sm shadow-yellow-400/20' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+            >
+              ⏱️ คำนวณหาระยะเวลา (ปี)
+            </button>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-8" noValidate>
             
+            {/* ชื่อพอร์ต */}
+            <div className="group">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">ชื่อพอร์ตการลงทุน</label>
+              <input
+                type="text"
+                className={`w-full px-4 py-3 rounded-lg border focus:ring-2 transition-all outline-none bg-slate-50 group-hover:bg-white text-slate-900 font-medium ${errors.portfolioName ? 'border-red-300 focus:border-red-500 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-yellow-400 focus:ring-yellow-200'}`}
+                placeholder="เช่น กองทุนเกษียณอายุ, พอร์ตลูกรัก" value={formData.portfolioName} onChange={(e) => handleChange('portfolioName', e.target.value)} disabled={isLoading}
+              />
+              {errors.portfolioName && <p className="mt-1 text-xs text-red-500 font-medium">⚠️ {errors.portfolioName}</p>}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* เงินลงทุนเริ่มต้น */}
               <div className="group">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">เงินลงทุนเริ่มต้น</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  เงินลงทุนเริ่มต้น {calcMode === 'find_budget' && <span className="text-yellow-600 ml-1">(AI คำนวณให้)</span>}
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-3 text-slate-400">฿</span>
                   <input
                     type="text" inputMode="numeric"
-                    className={`w-full pl-8 pr-4 py-3 rounded-lg border focus:ring-2 transition-all outline-none bg-slate-50 group-hover:bg-white text-slate-900 font-medium ${errors.initialAmount ? 'border-red-300 focus:border-red-500 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-yellow-400 focus:ring-yellow-200'}`}
-                    placeholder="100,000" value={formData.initialAmount} onChange={(e) => handleChange('initialAmount', e.target.value)} disabled={isLoading}
+                    className={`w-full pl-8 pr-4 py-3 rounded-lg border focus:ring-2 transition-all outline-none bg-slate-50 group-hover:bg-white text-slate-900 font-medium ${errors.initialAmount ? 'border-red-300 focus:border-red-500 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-yellow-400 focus:ring-yellow-200'} ${calcMode === 'find_budget' ? 'bg-yellow-50 text-yellow-800 font-bold' : ''}`}
+                    placeholder="100,000" 
+                    value={calcMode === 'find_budget' ? (getCalculatedBudget() ? formatNumber(String(getCalculatedBudget())) : '') : formData.initialAmount} 
+                    onChange={(e) => handleChange('initialAmount', e.target.value)} 
+                    disabled={isLoading || calcMode === 'find_budget'}
                   />
                 </div>
                 {errors.initialAmount && <p className="mt-1 text-xs text-red-500 font-medium">⚠️ {errors.initialAmount}</p>}
@@ -183,11 +271,16 @@ export default function PlanPage() {
 
               {/* ระยะเวลา */}
               <div className="group">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">ระยะเวลา (ปี)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  ระยะเวลา (ปี) {calcMode === 'find_duration' && <span className="text-yellow-600 ml-1">(AI คำนวณให้)</span>}
+                </label>
                 <input
                   type="text" inputMode="numeric" maxLength={2}
-                  className={`w-full px-4 py-3 rounded-lg border focus:ring-2 transition-all outline-none bg-slate-50 group-hover:bg-white text-slate-900 font-medium ${errors.duration ? 'border-red-300 focus:border-red-500 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-yellow-400 focus:ring-yellow-200'}`}
-                  placeholder="5" value={formData.duration} onChange={(e) => handleChange('duration', e.target.value)} disabled={isLoading}
+                  className={`w-full px-4 py-3 rounded-lg border focus:ring-2 transition-all outline-none bg-slate-50 group-hover:bg-white text-slate-900 font-medium ${errors.duration ? 'border-red-300 focus:border-red-500 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-yellow-400 focus:ring-yellow-200'} ${calcMode === 'find_duration' ? 'bg-yellow-50 text-yellow-800 font-bold' : ''}`}
+                  placeholder="5" 
+                  value={calcMode === 'find_duration' ? (getCalculatedDuration() || '') : formData.duration} 
+                  onChange={(e) => handleChange('duration', e.target.value)} 
+                  disabled={isLoading || calcMode === 'find_duration'}
                 />
                 {errors.duration && <p className="mt-1 text-xs text-red-500 font-medium">⚠️ {errors.duration}</p>}
               </div>
@@ -200,7 +293,7 @@ export default function PlanPage() {
                   className={`w-full px-4 py-3 rounded-lg border focus:ring-2 transition-all outline-none bg-slate-50 group-hover:bg-white text-slate-900 font-medium ${errors.numStocks ? 'border-red-300 focus:border-red-500 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-yellow-400 focus:ring-yellow-200'}`}
                   placeholder="5" value={numStocks} onChange={(e) => setNumStocks(e.target.value)} disabled={isLoading}
                 />
-                <p className="mt-1 text-[10px] text-slate-400">* ขั้นต่ำ 3 ตัว แนะนำ 7-12 ตัว</p>
+                <p className="mt-1 text-[10px] text-slate-400">* ขั้นต่ำ 3 ตัว</p>
                 {errors.numStocks && <p className="mt-1 text-xs text-red-500 font-medium">⚠️ {errors.numStocks}</p>}
               </div>
             </div>

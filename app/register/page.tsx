@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { SignUp } from "@clerk/nextjs";
+import Link from 'next/link';
 
 export default function RegisterPage() {
   return (
@@ -43,10 +44,13 @@ export default function RegisterPage() {
           forceRedirectUrl="/dashboard" // เมื่อสมัครเสร็จให้ไปหน้า Dashboard ทันที
         />
 
-        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+        <div className="mt-6 pt-4 border-t border-slate-100 text-center flex flex-col items-center gap-1">
            <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
              Project CS-01: IntelliPort
            </span>
+           <Link href="/admin" className="text-[11px] text-slate-400 hover:text-blue-600 hover:underline transition-colors mt-1.5">
+             สำหรับผู้ดูแลระบบ (Admin)
+           </Link>
         </div>
       </div>
     </div>

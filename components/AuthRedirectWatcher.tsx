@@ -10,7 +10,7 @@ export default function AuthRedirectWatcher() {
 
   useEffect(() => {
     // ถ้าสถานะโหลดเสร็จ + ล็อกอินอยู่ + อยู่ในหน้าที่ไม่ควรอยู่ (หน้าแรกหรือหน้าล็อกอิน)
-    if (isLoaded && isSignedIn && (pathname === "/" || pathname === "/login" || pathname === "/register")) {
+    if (isLoaded && isSignedIn && (pathname === "/login" || pathname === "/register")) {
       // ใช้ window.location.href แทน router.push เพื่อป้องกันอาการค้างจากการโหลด State ซ้อนกัน
       window.location.href = "/dashboard";
     }

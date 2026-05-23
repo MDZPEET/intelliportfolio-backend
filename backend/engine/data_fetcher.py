@@ -1,10 +1,25 @@
+# pyrefly: ignore [missing-import]
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Tuple
 import warnings
+import os
+import redis
+import pickle
+import hashlib
 
 warnings.filterwarnings("ignore")
+
+def get_redis_client():
+    host = os.getenv("REDIS_HOST", "localhost")
+    try:
+        client = redis.Redis(host=host, port=6379, db=0, socket_timeout=2)
+        client.ping()
+        return client
+    except Exception as e:
+        print(f"⚠️ Redis Connection Error: {e}")
+        return None
 
 class SETDataFetcher:
     @staticmethod
@@ -41,20 +56,6 @@ class SETDataFetcher:
         caps = {t: base_caps.get(t.replace(".BK", ""), 100000) for t in tickers}
         return pd.Series(caps)
 
-    @staticmethod
-    def get_official_beta(ticker: str):
-        """
-        (Deprecated) เดิมใช้ดึงจาก Settrade แต่ปัจจุบันถูกบล็อก 
-        จึงคืนค่า None เพื่อให้ระบบไปใช้ค่าที่คำนวณจาก Yahoo Finance แทน
-        """
-        return None
-
-    @staticmethod
-    def get_iaa_consensus(ticker: str):
-        """
-        (Deprecated) เปลี่ยนไปใช้ ManualViewProvider ใน engine/manual_views.py แทน
-        """
-        return None
 
 
 class YahooFinanceFetcher:
@@ -62,7 +63,18 @@ class YahooFinanceFetcher:
     def get_market_data_with_beta(tickers: List[str], period: str = "2y") -> Tuple[pd.DataFrame, Dict[str, float]]:
         """
         ดึงราคาหุ้นและคำนวณ Covariance Matrix พร้อมค่า Beta (Weekly 2Y)
+        พร้อมใช้งาน Redis Caching (อายุแคช 24 ชั่วโมง)
         """
+        tickers_str = ",".join(sorted(tickers))
+        cache_key = f"market_data:{hashlib.md5(tickers_str.encode()).hexdigest()}:{period}"
+        
+        r = get_redis_client()
+        if r:
+            cached_data = r.get(cache_key)
+            if cached_data:
+                print("⚡ ข้อมูลราคาหุ้นถูกดึงมาจาก Redis Cache (ไม่ต้องรอโหลด API)")
+                return pickle.loads(cached_data)
+
         # เพิ่ม .BK สำหรับหุ้นไทย และดึงดัชนีตลาด (^SET.BK)
         yf_tickers = [f"{t}.BK" for t in tickers]
         all_tickers = yf_tickers + ["^SET.BK"]
@@ -98,5 +110,12 @@ class YahooFinanceFetcher:
                 betas[t] = ticker_cov_market / market_var if market_var != 0 else 1.0
         else:
             betas = {t: 1.0 for t in cov_matrix.columns}
+            
+        if r:
+            try:
+                r.setex(cache_key, 86400, pickle.dumps((cov_matrix, betas))) # เก็บ 24 ชม.
+                print("💾 บันทึกข้อมูลลง Redis Cache สำเร็จ")
+            except Exception as e:
+                print(f"⚠️ ไม่สามารถบันทึก Cache ได้: {e}")
             
         return cov_matrix, betas

@@ -62,20 +62,24 @@ class GeneticPortfolioOptimizer:
             
             w_sum = np.sum(w)
             if w_sum <= 0: return -999.0,
-            w /= w_sum # ปรับสัดส่วนให้รวมกันได้ 1.0 (100%)
-            for i in range(len(ind)): ind[i] = float(w[i])
             
-            # คำนวณผลตอบแทนและความผันผวนของพอร์ต
-            p_ret = np.dot(w, bl_returns)
-            p_vol = np.sqrt(np.dot(w.T, np.dot(cov, w)))
+            # คำนวณผลตอบแทนและความผันผวนของพอร์ต (เราไม่ได้ normalize ในระดับ ind เพื่อให้ penalty ทำงาน)
+            w_normalized = w / w_sum
+            p_ret = np.dot(w_normalized, bl_returns)
+            p_vol = np.sqrt(np.dot(w_normalized.T, np.dot(cov, w_normalized)))
             if p_vol == 0: return -999.0,
             
             # Sharpe Ratio: วัดความคุ้มค่าของผลตอบแทนต่อความเสี่ยง
             sharpe = (p_ret - self.rf) / p_vol
             
-            # Penalty: บทลงโทษหากค่า Beta เบี่ยงเบนจากเป้าหมาย (ช่วยคุมความเสี่ยงให้เป็นไปตามระดับที่ผู้ใช้เลือก)
-            penalty = abs(np.dot(w, asset_betas) - target_beta) * 10 
-            return (sharpe - penalty),
+            # Penalty: บทลงโทษค่าน้ำหนัก (ให้รวมกันได้ 100%) ตามเอกสารข้อ 2.1.6.2
+            weight_penalty = 1000.0 * ((w_sum - 1.0) ** 2)
+            
+            # Penalty: บทลงโทษหากค่า Beta เบี่ยงเบนจากเป้าหมาย
+            beta_penalty = abs(np.dot(w_normalized, asset_betas) - target_beta) * 10 
+            
+            # Fitness_penalized
+            return (sharpe - weight_penalty - beta_penalty),
 
         toolbox.register("evaluate", evaluate)
         toolbox.register("mate", tools.cxBlend, alpha=0.5)
@@ -108,12 +112,24 @@ class GeneticPortfolioOptimizer:
         print("✅ กระบวนการ Genetic Algorithm เสร็จสมบูรณ์!")
 
         best_w = np.array(hof[0])
-        best_w = np.maximum(best_w, 0); best_w /= np.sum(best_w)
+        best_w = np.maximum(best_w, 0)
+        
+        # 🌟 บังคับให้เหลือเฉพาะหุ้นที่กำหนด (max_stocks) ในขั้นตอนสุดท้าย
+        if np.count_nonzero(best_w) > max_stocks:
+            threshold = np.sort(best_w)[-max_stocks]
+            best_w[best_w < threshold] = 0.0
+
+        if np.sum(best_w) > 0:
+            best_w /= np.sum(best_w) # Normalize ครั้งสุดท้ายก่อนนำไปใช้จริง
+        else:
+            best_w = np.ones(len(tickers)) / len(tickers)
         
         # แสดงสถานะสุดท้ายของพอร์ตก่อนส่งกลับ
-        final_ret = np.dot(best_w, bl_returns)
-        final_beta = np.dot(best_w, asset_betas)
+        final_ret = float(np.dot(best_w, bl_returns))
+        final_vol = float(np.sqrt(np.dot(best_w.T, np.dot(cov, best_w))))
+        final_beta = float(np.dot(best_w, asset_betas))
         print(f"📈 ผลตอบแทนคาดหวังรายปี: {final_ret:.2%}")
         print(f"🛡️ ค่าความเสี่ยงพอร์ต (Beta): {final_beta:.4f}")
 
-        return pd.DataFrame({'Ticker': tickers, 'Weight': best_w, 'Beta': asset_betas})
+        portfolio_df = pd.DataFrame({'Ticker': tickers, 'Weight': best_w, 'Beta': asset_betas})
+        return portfolio_df, final_ret, final_vol

@@ -7,11 +7,12 @@ class ManualViewProvider:
     @staticmethod
     def get_db_connection():
         try:
+            db_host = os.getenv("DATABASE_HOST", "localhost")
             return psycopg2.connect(
-                host="127.0.0.1",
+                host=db_host,
                 database="intelliport_db",
                 user="admin",
-                password=os.getenv("DB_PASSWORD"),
+                password="Heyrose05",
                 port="5432"
             )
         except Exception as e:

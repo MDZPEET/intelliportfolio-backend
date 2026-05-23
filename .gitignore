@@ -31,7 +31,27 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.*
+!.env.example
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# python virtual environments
+backend/venv/
+venv/
+.venv/
+env/
+ENV/
+
+# python cache and compiled files
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
 
 # vercel
 .vercel
@@ -39,3 +59,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# clerk configuration (can include secrets)
+/.clerk/

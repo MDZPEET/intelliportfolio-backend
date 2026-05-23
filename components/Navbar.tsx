@@ -1,9 +1,49 @@
+'use client';
+
 // components/Navbar.tsx
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 // 1. นำเข้า Components จาก Clerk
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, UserButton, useAuth } from "@clerk/nextjs";
 
 export default function Navbar() {
+  const { isSignedIn, isLoaded } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [prevSignedIn, setPrevSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkAdmin = () => {
+      if (typeof window !== 'undefined') {
+        setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      }
+    };
+
+    // Check initially
+    checkAdmin();
+
+    // Listen to custom login/logout events and standard storage changes
+    window.addEventListener('storage', checkAdmin);
+    window.addEventListener('admin-login', checkAdmin);
+    window.addEventListener('admin-logout', checkAdmin);
+
+    return () => {
+      window.removeEventListener('storage', checkAdmin);
+      window.removeEventListener('admin-login', checkAdmin);
+      window.removeEventListener('admin-logout', checkAdmin);
+    };
+  }, []);
+
+  // When Clerk signout occurs, auto-logout admin
+  useEffect(() => {
+    if (isLoaded) {
+      if (prevSignedIn === true && isSignedIn === false) {
+        localStorage.removeItem('isAdmin');
+        setIsAdmin(false);
+        window.dispatchEvent(new Event('admin-logout'));
+      }
+      setPrevSignedIn(isSignedIn);
+    }
+  }, [isSignedIn, isLoaded, prevSignedIn]);
   return (
     <nav className="fixed top-0 left-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 transition-all duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -37,6 +77,12 @@ export default function Navbar() {
                 แดชบอร์ด
               </Link>
             </SignedIn>
+            {isAdmin && (
+              <Link href="/admin" className="text-sm font-bold text-red-600 hover:text-red-700 transition-colors relative group">
+                ผู้ดูแลระบบ (Admin)
+                <span className="absolute bottom-[-4px] left-0 w-0 h-0.5 bg-red-600 transition-all group-hover:w-full"></span>
+              </Link>
+            )}
           </div>
 
           {/* ส่วนของปุ่มด้านขวาที่ปรับปรุงใหม่ */}
@@ -48,11 +94,11 @@ export default function Navbar() {
 
             {/* 2. ถ้ายังไม่ล็อกอิน: แสดงปุ่มเข้าสู่ระบบ */}
             <SignedOut>
-              <SignInButton mode="modal">
+              <Link href="/login">
                 <button className="bg-slate-900 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-md">
                   เข้าสู่ระบบ
                 </button>
-              </SignInButton>
+              </Link>
             </SignedOut>
 
             {/* 3. ถ้าล็อกอินแล้ว: แสดงปุ่มจัดการโปรไฟล์ผู้ใช้ */}

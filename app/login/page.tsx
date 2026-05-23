@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { SignIn } from "@clerk/nextjs";
+import Link from 'next/link';
 
 export default function LoginPage() {
   return (
@@ -43,10 +44,13 @@ export default function LoginPage() {
         />
 
         {/* ส่วนท้ายเดิมของคุณ */}
-        <div className="mt-8 text-center pt-4 border-t border-gray-100/60">
+        <div className="mt-8 text-center pt-4 border-t border-gray-100/60 flex flex-col items-center gap-1">
            <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100">
              Project CS-01: AI Powered Investment
            </span>
+           <Link href="/admin" className="text-[11px] text-gray-400 hover:text-blue-600 hover:underline transition-colors mt-1.5">
+             สำหรับผู้ดูแลระบบ (Admin)
+           </Link>
         </div>
       </div>
     </div>

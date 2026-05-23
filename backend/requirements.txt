@@ -18,3 +18,4 @@ openpyxl
 yfinance
 requests
 beautifulsoup4
+redis

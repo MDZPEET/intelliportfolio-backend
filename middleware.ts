@@ -1,10 +1,11 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
-// ✅ เพิ่ม /login และ /register เข้าไปในรายชื่อ "หน้าสาธารณะ"
+// ✅ เพิ่ม /login, /register และ /admin เข้าไปในรายชื่อ "หน้าสาธารณะ"
 const isPublicRoute = createRouteMatcher([
   '/', 
   '/login(.*)',    
-  '/register(.*)'
+  '/register(.*)',
+  '/admin(.*)'
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
